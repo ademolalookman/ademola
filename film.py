@@ -22,7 +22,7 @@ class HDFilmIzleScraper:
 
     def get_page_movies(self, page_num=1):
         url = f"{self.base_url}/page/{page_num}"
-        print(f"  {page_num}. Sayfa alınıyor : {url}")
+        print(f"  Sayfa {page_num} Çekiliyor : {url}")
         try:
             response = self.session.get(url, timeout=10)
             response.raise_for_status()
@@ -57,11 +57,11 @@ class HDFilmIzleScraper:
                             'genre': genre
                         })
                 except Exception as e:
-                    print(f"hata {e}")
+                    print(f"hata: {e}")
                     continue
             return movies
         except Exception as e:
-            print(f"hata sayfa {page_num}: {e}")
+            print(f"sayfa {page_num} çekilemedi: {e}")
             return []
 
     def get_movie_details(self, movie_url):
@@ -83,7 +83,7 @@ class HDFilmIzleScraper:
                 'stream_url': stream_url
             }
         except Exception as e:
-            print(f"Error getting movie details for {movie_url}: {e}")
+            print(f"bu filmde hata {movie_url}: {e}")
             return None
 
     def extract_stream_url(self, iframe_url):
@@ -93,7 +93,7 @@ class HDFilmIzleScraper:
             soup = BeautifulSoup(response.content, 'html.parser')
             script_content = ""
             for script in soup.find_all('script'):
-                if script.string and 'kaynaklar:' in script.string:
+                if script.string and 'sources:' in script.string:
                     script_content = script.string
                     break
             if not script_content:
@@ -109,7 +109,7 @@ class HDFilmIzleScraper:
                     continue
             return None
         except Exception as e:
-            print(f"hata iframe {iframe_url}: {e}")
+            print(f"bu iframeden çekilemedi {iframe_url}: {e}")
             return None
 
     def decode_vidrame_url(self, encoded_data):
@@ -123,7 +123,7 @@ class HDFilmIzleScraper:
             final_url = rot13_decoded[::-1]
             return final_url
         except Exception as e:
-            print(f"vidrame url hata {e}")
+            print(f"vidrame hata {e}")
             return None
 
     def rot13_decode(self, text):
@@ -142,17 +142,12 @@ class HDFilmIzleScraper:
                 f.write(content)
             return True
         except Exception as e:
-            print(f"Kaydedemedik hata : {e}")
+            print(f"playlit hatası {e}")
             return False
 
     def scrape_and_create_playlist(self, filename="hdfilmizle.m3u"):
-        if os.path.exists(filename):
-            os.remove(filename)
-
-        header = "#EXTM3U\n"
-        
-
-        self.save_playlist(header, filename)  
+        m3u_content = "#EXTM3U\n"
+       
 
         successful_movies = 0
         total_movies = 0
@@ -161,15 +156,14 @@ class HDFilmIzleScraper:
         while True:
             movies = self.get_page_movies(page)
             if not movies:
-                print(f"{page}. Sayfadan sonra film yok kapanıyor")
+                print(f" sayfa {page} daha film yok Kapanıyor")
                 break
 
-            print(f"\n--- Sayfa {page} | {len(movies)} tane Film bulundu ---")
-            m3u_chunk = ""
+            print(f"--- sayfa {page} | {len(movies)} tane film bulundu  ---")
 
             for movie in movies:
                 total_movies += 1
-                print(f"{total_movies}. Film : {movie['title']}")
+                print(f"Film {total_movies}: {movie['title']}")
                 try:
                     details = self.get_movie_details(movie['url'])
                     if details and details['stream_url']:
@@ -177,11 +171,11 @@ class HDFilmIzleScraper:
                         if movie['year']:
                             info += f" ({movie['year']})"
 
-                        m3u_chunk += f"#EXTINF:-1"
-                        m3u_chunk += f' group-title="Filmler" tvg-name="{movie["title"]}"'
+                        m3u_content += f"#EXTINF:-1"
+                        m3u_content += f' group-title="Filmler" tvg-name="{movie["title"]}"'
                         if movie['poster']:
-                            m3u_chunk += f' tvg-logo="{movie["poster"]}"'
-                        m3u_chunk += f",{info}\n{details['stream_url']}\n\n"
+                            m3u_content += f' tvg-logo="{movie["poster"]}"'
+                        m3u_content += f",{info}\n{details['stream_url']}\n\n"
                         successful_movies += 1
                     else:
                         print(f"❌ Stream bulunamadı: {movie['title']}")
@@ -189,19 +183,19 @@ class HDFilmIzleScraper:
                     print(f"❌ Hata: {movie['title']} - {e}")
                 time.sleep(1)
 
-            with open(filename, "a", encoding="utf-8") as f:
-                f.write(m3u_chunk)
-
-            print(f"✅ Page {page} playlist eklendi. ({len(movies)} film)\n")
             page += 1
             time.sleep(1)
 
         print(f"\n🎉 {successful_movies}/{total_movies} film başarıyla işlendi.")
-        print(f"📁 Playlist kaydedildi: {filename} ({os.path.getsize(filename)} bytes)")
+        if self.save_playlist(m3u_content, filename):
+            print(f"✅ Playlist kaydedildi: {filename}")
+            print(f"📁 Boyut: {os.path.getsize(filename)} bytes")
+        else:
+            print("❌ Playlist kaydedilemedi.")
 
 def main():
     scraper = HDFilmIzleScraper()
-    print("Başlıyor aktif...")
+    
     scraper.scrape_and_create_playlist()
 
 if __name__ == "__main__":
