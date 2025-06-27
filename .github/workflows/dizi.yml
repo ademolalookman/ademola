@@ -31,8 +31,10 @@ jobs:
           pip install -U setuptools wheel
           pip install aiohttp beautifulsoup4 requests httpx parsel Kekik
 
-      
 
+      - name: dizi.py Çalıştır
+        run: python dizi.py
+      
       - name: film.py Çalıştır
         run: python film.py
 
