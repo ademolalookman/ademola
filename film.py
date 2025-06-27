@@ -11,12 +11,7 @@ from datetime import datetime
 class HDFilmIzleScraper:
     def __init__(self):
         self.base_url = "https://www.hdfilmizle.net"
-        self.proxy_url = "http://179.61.129.52:3128"  # Proxy IP ve port burada
         self.session = requests.Session()
-        self.session.proxies.update({
-            "http": self.proxy_url,
-            "https": self.proxy_url,
-        })
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -153,6 +148,7 @@ class HDFilmIzleScraper:
     def scrape_and_create_playlist(self, filename="hdfilmizle.m3u"):
         m3u_content = "#EXTM3U\n"
        
+
         successful_movies = 0
         total_movies = 0
         page = 1
@@ -199,6 +195,7 @@ class HDFilmIzleScraper:
 
 def main():
     scraper = HDFilmIzleScraper()
+    
     scraper.scrape_and_create_playlist()
 
 if __name__ == "__main__":
