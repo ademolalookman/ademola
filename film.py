@@ -1,202 +1,483 @@
-import requests
-import base64
+import asyncio
+import aiohttp
 import re
-import json
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin
-import time
 import os
-from datetime import datetime
+from itertools import islice
+from urllib.parse import urljoin, urlparse
+from bs4 import BeautifulSoup
+import logging
+from concurrent.futures import ThreadPoolExecutor
+import time
 
-class HDFilmIzleScraper:
-    def __init__(self):
-        self.base_url = "https://www.hdfilmizle.net"
-        self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:136.0) Gecko/20100101 Firefox/136.0',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive'
-        })
 
-    def get_page_movies(self, page_num=1):
-        url = f"{self.base_url}/page/{page_num}"
-        print(f"  Sayfa {page_num} Çekiliyor : {url}")
-        try:
-            response = self.session.get(url, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.content, 'html.parser')
-            movies = []
-            movie_elements = soup.select('div#moviesListResult a.poster')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
-            for element in movie_elements:
-                try:
-                    title_elem = element.select_one('h2.title')
-                    title = title_elem.get_text(strip=True) if title_elem else ""
-                    href = element.get('href', '')
-                    if href and not href.startswith('http'):
-                        href = urljoin(self.base_url, href)
-                    img_elem = element.select_one('img')
-                    poster_url = ""
-                    if img_elem:
-                        poster_url = img_elem.get('data-src') or img_elem.get('src', '')
-                        if poster_url and not poster_url.startswith('http'):
-                            poster_url = urljoin(self.base_url, poster_url)
-                    year_elem = element.select_one('.poster-year')
-                    year = year_elem.get_text(strip=True) if year_elem else ""
-                    genre_elem = element.select_one('.poster-genres')
-                    genre = genre_elem.get_text(strip=True) if genre_elem else ""
 
-                    if title and href:
-                        movies.append({
-                            'title': title,
-                            'url': href,
-                            'poster': poster_url,
-                            'year': year,
-                            'genre': genre
-                        })
-                except Exception as e:
-                    print(f"hata: {e}")
-                    continue
-            return movies
-        except Exception as e:
-            print(f"sayfa {page_num} çekilemedi: {e}")
-            return []
+BASE_URL = "https://dizifun4.com"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "tr-TR,tr;q=0.8,en-US;q=0.5,en;q=0.3",
+    "Accept-Encoding": "gzip, deflate",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+}
 
-    def get_movie_details(self, movie_url):
-        try:
-            response = self.session.get(movie_url, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.content, 'html.parser')
-            iframe = soup.select_one('iframe')
-            if not iframe:
-                return None
-            iframe_url = iframe.get('data-src') or iframe.get('src')
-            if not iframe_url:
-                return None
-            if not iframe_url.startswith('http'):
-                iframe_url = urljoin(self.base_url, iframe_url)
-            stream_url = self.extract_stream_url(iframe_url)
-            return {
-                'iframe_url': iframe_url,
-                'stream_url': stream_url
-            }
-        except Exception as e:
-            print(f"bu filmde hata {movie_url}: {e}")
-            return None
 
-    def extract_stream_url(self, iframe_url):
-        try:
-            response = self.session.get(iframe_url, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.content, 'html.parser')
-            script_content = ""
-            for script in soup.find_all('script'):
-                if script.string and 'sources:' in script.string:
-                    script_content = script.string
-                    break
-            if not script_content:
-                return None
-            regex = r'EE\.dd\("([^"]+)"\)'
-            matches = re.findall(regex, script_content)
-            for encoded_data in matches:
-                try:
-                    decoded_url = self.decode_vidrame_url(encoded_data)
-                    if decoded_url and decoded_url.startswith('http'):
-                        return decoded_url
-                except:
-                    continue
-            return None
-        except Exception as e:
-            print(f"bu iframeden çekilemedi {iframe_url}: {e}")
-            return None
+def sanitize_id(text):
+    """Metni ID formatına dönüştürür"""
+    return re.sub(r'[^A-Za-z0-9]', '_', text).upper()
 
-    def decode_vidrame_url(self, encoded_data):
-        try:
-            video = encoded_data.replace('-', '+').replace('_', '/')
-            while len(video) % 4 != 0:
-                video += '='
-            decoded_bytes = base64.b64decode(video)
-            decoded_str = decoded_bytes.decode('utf-8', errors='ignore')
-            rot13_decoded = self.rot13_decode(decoded_str)
-            final_url = rot13_decoded[::-1]
-            return final_url
-        except Exception as e:
-            print(f"vidrame hata {e}")
-            return None
+def fix_url(url, base=BASE_URL):
+    """URL'yi düzeltir"""
+    if not url:
+        return None
+    if url.startswith('/'):
+        return urljoin(base, url)
+    return url
 
-    def rot13_decode(self, text):
-        result = ""
-        for char in text:
-            if char.isalpha():
-                base = ord('A') if char.isupper() else ord('a')
-                result += chr((ord(char) - base + 13) % 26 + base)
+async def fetch_page(session, url, timeout=45):  
+    """Async olarak sayfa içeriğini getirir"""
+    try:
+        async with session.get(url, headers=HEADERS, timeout=aiohttp.ClientTimeout(total=timeout)) as response:
+            if response.status == 200:
+                content = await response.text()
+                return content
             else:
-                result += char
-        return result
+                logger.warning(f"[!] HTTP {response.status} hatası: {url}")
+                return None
+    except asyncio.TimeoutError:
+        logger.error(f"[!] Timeout hatası ({timeout}s): {url}")
+        return None
+    except Exception as e:
+        logger.error(f"[!] Sayfa getirme hatası ({url}): {e}")
+        return None
 
-    def save_playlist(self, content, filename):
-        try:
-            with open(filename, "w", encoding="utf-8") as f:
-                f.write(content)
-            return True
-        except Exception as e:
-            print(f"playlit hatası {e}")
-            return False
-
-    def scrape_and_create_playlist(self, filename="hdfilmizle.m3u"):
-        m3u_content = "#EXTM3U\n"
-       
-
-        successful_movies = 0
-        total_movies = 0
-        page = 1
-
-        while True:
-            movies = self.get_page_movies(page)
-            if not movies:
-                print(f" sayfa {page} daha film yok Kapanıyor")
-                break
-
-            print(f"--- sayfa {page} | {len(movies)} tane film bulundu  ---")
-
-            for movie in movies:
-                total_movies += 1
-                print(f"Film {total_movies}: {movie['title']}")
-                try:
-                    details = self.get_movie_details(movie['url'])
-                    if details and details['stream_url']:
-                        info = f"{movie['title']}"
-                        if movie['year']:
-                            info += f" ({movie['year']})"
-
-                        m3u_content += f"#EXTINF:-1"
-                        m3u_content += f' group-title="Filmler" tvg-name="{movie["title"]}"'
-                        if movie['poster']:
-                            m3u_content += f' tvg-logo="{movie["poster"]}"'
-                        m3u_content += f",{info}\n{details['stream_url']}\n\n"
-                        successful_movies += 1
-                    else:
-                        print(f"❌ Stream bulunamadı: {movie['title']}")
-                except Exception as e:
-                    print(f"❌ Hata: {movie['title']} - {e}")
-                time.sleep(1)
-
-            page += 1
-            time.sleep(1)
-
-        print(f"\n🎉 {successful_movies}/{total_movies} film başarıyla işlendi.")
-        if self.save_playlist(m3u_content, filename):
-            print(f"✅ Playlist kaydedildi: {filename}")
-            print(f"📁 Boyut: {os.path.getsize(filename)} bytes")
-        else:
-            print("❌ Playlist kaydedilemedi.")
-
-def main():
-    scraper = HDFilmIzleScraper()
+async def get_correct_domain_from_playhouse(session, file_id, timeout=15):
+    """Playhouse URL'ine istek atıp redirect edilen doğru domain'i bulur"""
+    playhouse_url = f"https://playhouse.premiumvideo.click/player/{file_id}"
     
-    scraper.scrape_and_create_playlist()
+    try:
+        logger.info(f"[*] Playhouse URL'ine redirect testi: {playhouse_url}")
+        
+        async with session.get(playhouse_url, 
+                              headers=HEADERS, 
+                              timeout=aiohttp.ClientTimeout(total=timeout),
+                              allow_redirects=True) as response:
+            
+            final_url = str(response.url)
+            logger.info(f"[*] Final redirect URL: {final_url}")
+            
+            domain_match = re.search(r'https://([^.]+)\.premiumvideo\.click', final_url)
+            if domain_match:
+                domain = domain_match.group(1)
+                logger.info(f"[✅] Redirect edilen domain bulundu: {domain}")
+                
+                m3u8_url = f"https://{domain}.premiumvideo.click/uploads/encode/{file_id}/master.m3u8"
+                
+                is_valid = await test_m3u8_url(session, m3u8_url)
+                if is_valid:
+                    logger.info(f"[✅] M3U8 URL doğrulandı: {m3u8_url}")
+                    return domain, m3u8_url
+                else:
+                    logger.warning(f"[⚠️] M3U8 URL doğrulanamadı ama domain bulundu: {domain}")
+                    return domain, m3u8_url
+            else:
+                logger.warning(f"[⚠️] Redirect URL'den domain çıkarılamadı: {final_url}")
+                logger.info(f"[*] Fallback: Eski domain test sistemi kullanılıyor")
+                return await find_working_domain_fallback(session, file_id)
+                
+    except asyncio.TimeoutError:
+        logger.warning(f"[⚠️] Playhouse timeout, fallback sistem kullanılıyor")
+        return await find_working_domain_fallback(session, file_id)
+    except Exception as e:
+        logger.warning(f"[⚠️] Playhouse hatası: {e}, fallback sistem kullanılıyor")
+        return await find_working_domain_fallback(session, file_id)
+
+async def find_working_domain_fallback(session, file_id, domains=["d1", "d2", "d3", "d4"]):
+    """Fallback: Eski sistem ile çalışan domain bulma"""
+    logger.info(f"[*] Fallback domain testi başlıyor...")
+    
+    for domain in domains:
+        m3u8_url = f"https://{domain}.premiumvideo.click/uploads/encode/{file_id}/master.m3u8"
+        
+        logger.info(f"[*] Fallback test: {domain}")
+        is_working = await test_m3u8_url(session, m3u8_url)
+        
+        if is_working:
+            logger.info(f"[✅] Fallback domain çalışıyor: {domain}")
+            return domain, m3u8_url
+    
+    logger.warning(f"[⚠️] Hiçbir domain çalışmıyor! Default d2 kullanılacak.")
+    return "d2", f"https://d2.premiumvideo.click/uploads/encode/{file_id}/master.m3u8"
+
+async def test_m3u8_url(session, url, timeout=15):
+    """M3U8 URL test fonksiyonu"""
+    try:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=timeout), allow_redirects=True) as response:
+            final_url = str(response.url)
+            content_type = response.headers.get("Content-Type", "").lower()
+            content_length = response.headers.get("Content-Length")
+            
+            if response.status != 200:
+                return False
+            
+            if "premiumvideo.click" not in final_url:
+                return False
+            
+            try:
+                content = await response.content.read(4096)
+                text = content.decode('utf-8', errors='ignore')
+                
+                if not text.strip().startswith("#EXTM3U"):
+                    return False
+                
+                suspicious_patterns = [
+                    r"<html", r"<body", r"<title", r"error", r"not found", 
+                    r"access denied", r"kerimkirac\.com", r"404", r"403", r"500"
+                ]
+                
+                for pattern in suspicious_patterns:
+                    if re.search(pattern, text, re.IGNORECASE):
+                        return False
+                
+                if content_length and int(content_length) < 50:
+                    return False
+                
+                if "master.m3u8" not in final_url:
+                    return False
+                
+                return True
+                
+            except UnicodeDecodeError:
+                return False
+                
+    except asyncio.TimeoutError:
+        return False
+    except Exception as e:
+        return False
+
+async def get_movies_from_page(session, page_num):
+    """Belirli bir sayfadan film listesini alır"""
+    filmler_url = f"{BASE_URL}/filmler?p={page_num}"
+    logger.info(f"Sayfa {page_num} alınıyor: {filmler_url}")
+    
+    content = await fetch_page(session, filmler_url)
+    if not content:
+        logger.warning(f"[!] Film sayfası {page_num} alınamadı.")
+        return [], False
+    
+    soup = BeautifulSoup(content, 'html.parser')
+    
+    
+    movie_links = []
+    link_elements = soup.select("a.uk-position-cover[href*='/film/']")
+
+    for element in link_elements:
+        href = element.get("href")
+        if href:
+            full_url = fix_url(href)
+            if full_url and full_url not in movie_links:
+                movie_links.append(full_url)
+    
+    
+    if not movie_links:
+        alt_selectors = [
+            ".uk-grid .uk-width-large-1-6 a[href*='/film/']",
+            ".uk-grid .uk-width-large-1-5 a[href*='/film/']",
+            "a[href*='/film/']"
+        ]
+        
+        for selector in alt_selectors:
+            elements = soup.select(selector)
+            for element in elements:
+                href = element.get("href")
+                if href:
+                    full_url = fix_url(href)
+                    if full_url and full_url not in movie_links:
+                        movie_links.append(full_url)
+    
+    
+    has_next_page = False
+    pagination_selectors = [
+        ".uk-pagination .uk-pagination-next",
+        ".pagination .next",
+        "a[href*='?p=']",
+        ".uk-pagination a"
+    ]
+    
+    for selector in pagination_selectors:
+        pagination_elements = soup.select(selector)
+        for element in pagination_elements:
+            href = element.get("href", "")
+            if href and f"?p={page_num + 1}" in href:
+                has_next_page = True
+                break
+        if has_next_page:
+            break
+    
+    
+    if not has_next_page and movie_links:
+        next_page_url = f"{BASE_URL}/filmler?p={page_num + 1}"
+        next_content = await fetch_page(session, next_page_url)
+        if next_content:
+            next_soup = BeautifulSoup(next_content, 'html.parser')
+            next_links = next_soup.select("a[href*='/film/']")
+            if next_links:
+                has_next_page = True
+    
+    logger.info(f"[+] Sayfa {page_num}: {len(movie_links)} film linki toplandı. Sonraki sayfa: {'Var' if has_next_page else 'Yok'}")
+    return movie_links, has_next_page
+
+async def get_movies_from_homepage():
+    """Tüm sayfalardan film listesini alır"""
+    async with aiohttp.ClientSession() as session:
+        all_movie_links = []
+        page_num = 1
+        max_pages = 100  
+        
+        while page_num <= max_pages:
+            movie_links, has_next_page = await get_movies_from_page(session, page_num)
+            
+            if not movie_links:
+                logger.info(f"[!] Sayfa {page_num} boş, tarama durduruluyor.")
+                break
+            
+            
+            new_count = 0
+            for link in movie_links:
+                if link not in all_movie_links:
+                    all_movie_links.append(link)
+                    new_count += 1
+            
+            logger.info(f"[+] Sayfa {page_num}: {new_count} yeni film eklendi. Toplam: {len(all_movie_links)}")
+            
+            if not has_next_page:
+                logger.info(f"[✓] Son sayfa ({page_num}) işlendi.")
+                break
+            
+            page_num += 1
+            
+            
+            await asyncio.sleep(0.5)
+        
+        logger.info(f"[✓] Toplam {len(all_movie_links)} benzersiz film linki toplandı ({page_num} sayfa tarandı).")
+        return all_movie_links
+
+async def get_movie_metadata(session, movie_url):
+    """Film meta verilerini alır"""
+    content = await fetch_page(session, movie_url)
+    if not content:
+        return "Bilinmeyen Film", ""
+    
+    soup = BeautifulSoup(content, 'html.parser')
+    
+    
+    title_element = soup.select_one(".text-bold")
+    title = title_element.get_text(strip=True) if title_element else "Bilinmeyen Film"
+    
+    
+    logo_url = ""
+    logo_element = soup.select_one(".media-cover img")
+    if logo_element:
+        logo_url = logo_element.get("src") or ""
+
+    logo_url = fix_url(logo_url)
+
+    return title, logo_url
+
+async def extract_m3u8_from_movie(session, movie_url):
+    """Film sayfasından m3u8 linkini çıkarır"""
+    content = await fetch_page(session, movie_url)
+    if not content:
+        return None
+    
+    soup = BeautifulSoup(content, 'html.parser')
+    
+    logger.info(f"[*] Film işleniyor: {movie_url}")
+    
+    m3u8_url = None
+    
+    try:
+        
+        iframe_selectors = [
+            'iframe[title="playhouse"]',
+            'iframe[src*="playhouse.premiumvideo.click"]',
+            'iframe[src*="premiumvideo.click/player"]'
+        ]
+        
+        playhouse_url = None
+        file_id = None
+        
+        
+        for selector in iframe_selectors:
+            iframe_element = soup.select_one(selector)
+            if iframe_element:
+                src = iframe_element.get("src")
+                if src and "playhouse.premiumvideo.click" in src:
+                    if src.startswith("//"):
+                        src = "https:" + src
+                    playhouse_url = src
+                    logger.info(f"[+] Playhouse iframe bulundu: {playhouse_url}")
+                    break
+        
+        
+        if not playhouse_url:
+            scripts = soup.find_all('script')
+            for script in scripts:
+                script_content = script.get_text() or ""
+                
+                hex_pattern = re.compile(r'hexToString\w*\("([a-fA-F0-9]+)"\)')
+                hex_matches = hex_pattern.findall(script_content)
+                
+                if hex_matches:
+                    logger.info(f"[+] Script içinde {len(hex_matches)} hex URL bulundu.")
+                    for hex_value in hex_matches:
+                        try:
+                            decoded_url = bytes.fromhex(hex_value).decode('utf-8')
+                            if decoded_url and "playhouse.premiumvideo.click" in decoded_url:
+                                playhouse_url = decoded_url
+                                if playhouse_url.startswith("//"):
+                                    playhouse_url = "https:" + playhouse_url
+                                logger.info(f"[+] Hex'ten çözülen playhouse URL: {playhouse_url}")
+                                break
+                        except Exception as e:
+                            logger.error(f"[!] Hex çözme hatası: {e}")
+                    
+                    if playhouse_url:
+                        break
+        
+        
+        if playhouse_url:
+            playhouse_match = re.search(r'playhouse\.premiumvideo\.click/player/([a-zA-Z0-9]+)', playhouse_url)
+            if playhouse_match:
+                file_id = playhouse_match.group(1)
+                logger.info(f"[+] Playhouse File ID bulundu: {file_id}")
+                
+                
+                working_domain, m3u8_url = await get_correct_domain_from_playhouse(session, file_id)
+                logger.info(f"[+] Bulunan domain: {working_domain}, M3U8: {m3u8_url}")
+        
+        
+        if not m3u8_url:
+            logger.info("[*] Playhouse bulunamadı, eski sistem ile deneniyor...")
+            
+            iframe_selectors_fallback = [
+                "iframe#londonIframe",
+                "iframe[src*=premiumvideo]",
+                "iframe[data-src*=premiumvideo]",
+                "iframe[src*=player]",
+                "iframe"
+            ]
+            
+            for selector in iframe_selectors_fallback:
+                iframe_element = soup.select_one(selector)
+                if iframe_element:
+                    src = iframe_element.get("src")
+                    if not src or src == "about:blank":
+                        src = iframe_element.get("data-src")
+                    
+                    if src and src != "about:blank":
+                        iframe_url = fix_url(src)
+                        logger.info(f"[+] Fallback iframe URL: {iframe_url}")
+                        
+                        
+                        premium_video_match = re.search(r'premiumvideo\.click/player\.php\?file_id=([a-zA-Z0-9]+)', iframe_url)
+                        if premium_video_match:
+                            file_id = premium_video_match.group(1)
+                            logger.info(f"[+] Fallback File ID: {file_id}")
+                            
+                            
+                            working_domain, m3u8_url = await find_working_domain_fallback(session, file_id)
+                            break
+    
+    except Exception as e:
+        logger.error(f"[!] Film işleme genel hatası: {e}")
+    
+    return m3u8_url
+
+async def process_movies(all_movie_links, output_filename="filmfun.m3u"):
+    """Tüm filmleri tek bir dosyaya yazar"""
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=10)) as session:
+        with open(output_filename, "w", encoding="utf-8") as f:
+            f.write("#EXTM3U\n")
+            
+            #
+            semaphore = asyncio.Semaphore(5)
+            
+            async def process_single_movie(movie_url):
+                async with semaphore:
+                    try:
+                        
+                        title, logo_url = await get_movie_metadata(session, movie_url)
+                        logger.info(f"\n[+] İşleniyor: {title}")
+                        
+                        
+                        m3u8_url = await extract_m3u8_from_movie(session, movie_url)
+                        
+                        if m3u8_url:
+                            tvg_id = sanitize_id(title)
+                            
+                            return {
+                                'title': title,
+                                'logo_url': logo_url,
+                                'tvg_id': tvg_id,
+                                'm3u8_url': m3u8_url
+                            }
+                        else:
+                            logger.warning(f"[!] m3u8 URL bulunamadı: {title}")
+                            return None
+                    
+                    except Exception as e:
+                        logger.error(f"[!] Film işleme hatası ({movie_url}): {e}")
+                        return None
+            
+            
+            tasks = [process_single_movie(movie_url) for movie_url in all_movie_links]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            
+            
+            successful_count = 0
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.error(f"[!] Task hatası: {result}")
+                    continue
+                
+                if result is None:
+                    continue
+                
+                f.write(
+                    f'#EXTINF:-1 tvg-name="{result["title"]}" '
+                    f'tvg-language="Turkish" tvg-country="TR" '
+                    f'tvg-id="{result["tvg_id"]}" '
+                    f'tvg-logo="{result["logo_url"]}" '
+                    f'group-title="Filmler",{result["title"]}\n'
+                )
+                f.write(result["m3u8_url"].strip() + "\n")
+                logger.info(f"[✓] {result['title']} eklendi.")
+                successful_count += 1
+
+            logger.info(f"\n[✓] {successful_count} film başarıyla eklendi.")
+
+    logger.info(f"\n[✓] {output_filename} dosyası oluşturuldu.")
+
+
+async def main():
+    start_time = time.time()
+    
+    
+    movie_urls = await get_movies_from_homepage()
+    if not movie_urls:
+        logger.error("[!] Film listesi boş, seçicileri kontrol et.")
+        return
+
+    
+    await process_movies(movie_urls)
+
+    end_time = time.time()
+    logger.info(f"\n[✓] Tüm işlemler tamamlandı. Süre: {end_time - start_time:.2f} saniye")
+
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
