@@ -25,9 +25,49 @@ HEADERS = {
 }
 
 
+
+
 def sanitize_id(text):
-    """Metni ID formatına dönüştürür"""
-    return re.sub(r'[^A-Za-z0-9]', '_', text).upper()
+    """Metni ID formatına dönüştürür - Türkçe karakterleri düzgün handle eder"""
+    if not text:
+        return "UNKNOWN"
+    
+    
+    turkish_chars = {
+        'ç': 'c', 'Ç': 'C',
+        'ğ': 'g', 'Ğ': 'G', 
+        'ı': 'i', 'I': 'I',
+        'İ': 'I', 'i': 'i',
+        'ö': 'o', 'Ö': 'O',
+        'ş': 's', 'Ş': 'S',
+        'ü': 'u', 'Ü': 'U'
+    }
+    
+    
+    for turkish_char, english_char in turkish_chars.items():
+        text = text.replace(turkish_char, english_char)
+    
+    
+    import unicodedata
+    text = unicodedata.normalize('NFD', text)
+    text = ''.join(c for c in text if unicodedata.category(c) != 'Mn')
+    
+    
+    text = re.sub(r'[^A-Za-z0-9\s]', '', text)
+    
+    
+    text = re.sub(r'\s+', '_', text.strip())
+    
+    
+    text = text.upper()
+    
+    
+    text = re.sub(r'_+', '_', text)
+    
+    
+    text = text.strip('_')
+    
+    return text if text else "UNKNOWN"
 
 def fix_url(url, base=BASE_URL):
     """URL'yi düzeltir"""
@@ -403,7 +443,7 @@ async def process_movies(all_movie_links, output_filename="filmfun.m3u"):
         with open(output_filename, "w", encoding="utf-8") as f:
             f.write("#EXTM3U\n")
             
-            #
+            
             semaphore = asyncio.Semaphore(5)
             
             async def process_single_movie(movie_url):
