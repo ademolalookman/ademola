@@ -237,7 +237,8 @@ async def get_series_from_page(session, page_num):
     
     
     series_links = []
-    link_elements = soup.select(".uk-grid .uk-width-large-1-6 a.uk-position-cover")
+    link_elements = soup.select("a.uk-position-cover[href*='/dizi/']")
+
     
     for element in link_elements:
         href = element.get("href")
