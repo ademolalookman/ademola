@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 BASE_URL = "https://dizifun4.com"
+PROXY_BASE = "https://proxydizifun.vercel.app/api/proxy.js"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
@@ -25,6 +26,19 @@ HEADERS = {
 }
 
 
+def create_proxy_url(original_url):
+    """Orijinal URL'yi proxy üzerinden geçirir"""
+    if not original_url:
+        return None
+    
+    
+    if PROXY_BASE in original_url:
+        return original_url
+    
+    
+    proxy_url = f"{PROXY_BASE}?referer=https://dizifun4.com&url={original_url}"
+    logger.info(f"[+] Proxy URL oluşturuldu: {proxy_url}")
+    return proxy_url
 
 
 def sanitize_id(text):
@@ -92,6 +106,37 @@ async def fetch_page(session, url, timeout=45):
         return None
     except Exception as e:
         logger.error(f"[!] Sayfa getirme hatası ({url}): {e}")
+        return None
+
+async def extract_gujan_m3u8(session, iframe_url, file_id):
+    """Gujan player'dan M3U8 URL'ini çıkarır"""
+    try:
+        
+        logger.info(f"[*] Gujan player sayfası getiriliyor: {iframe_url}")
+        
+        
+        if iframe_url.startswith("//"):
+            iframe_url = "https:" + iframe_url
+        
+        content = await fetch_page(session, iframe_url)
+        if not content:
+            logger.warning(f"[!] Gujan player sayfası alınamadı: {iframe_url}")
+            return None
+        
+        
+        m3u8_url = f"https://gujan.premiumvideo.click/hls/{file_id}_o/playlist.m3u8"
+        
+        
+        is_valid = await test_m3u8_url(session, m3u8_url)
+        if is_valid:
+            logger.info(f"[✅] Gujan M3U8 URL doğrulandı: {m3u8_url}")
+            return m3u8_url
+        else:
+            logger.warning(f"[⚠️] Gujan M3U8 URL doğrulanamadı: {m3u8_url}")
+            return m3u8_url  
+    
+    except Exception as e:
+        logger.error(f"[!] Gujan M3U8 çıkarma hatası: {e}")
         return None
 
 async def get_correct_domain_from_playhouse(session, file_id, timeout=15):
@@ -183,9 +228,6 @@ async def test_m3u8_url(session, url, timeout=15):
                         return False
                 
                 if content_length and int(content_length) < 50:
-                    return False
-                
-                if "master.m3u8" not in final_url:
                     return False
                 
                 return True
@@ -341,67 +383,87 @@ async def extract_m3u8_from_movie(session, movie_url):
     
     try:
         
-        iframe_selectors = [
-            'iframe[title="playhouse"]',
-            'iframe[src*="playhouse.premiumvideo.click"]',
-            'iframe[src*="premiumvideo.click/player"]'
-        ]
-        
-        playhouse_url = None
-        file_id = None
-        
-        
-        for selector in iframe_selectors:
-            iframe_element = soup.select_one(selector)
-            if iframe_element:
-                src = iframe_element.get("src")
-                if src and "playhouse.premiumvideo.click" in src:
-                    if src.startswith("//"):
-                        src = "https:" + src
-                    playhouse_url = src
-                    logger.info(f"[+] Playhouse iframe bulundu: {playhouse_url}")
-                    break
-        
-        
-        if not playhouse_url:
-            scripts = soup.find_all('script')
-            for script in scripts:
-                script_content = script.get_text() or ""
+        gujan_iframe = soup.select_one('iframe[title="dizifunplay"]')
+        if gujan_iframe:
+            src = gujan_iframe.get("src")
+            if src and "gujan.premiumvideo.click/e/" in src:
+                logger.info(f"[+] Gujan player iframe bulundu: {src}")
                 
-                hex_pattern = re.compile(r'hexToString\w*\("([a-fA-F0-9]+)"\)')
-                hex_matches = hex_pattern.findall(script_content)
                 
-                if hex_matches:
-                    logger.info(f"[+] Script içinde {len(hex_matches)} hex URL bulundu.")
-                    for hex_value in hex_matches:
-                        try:
-                            decoded_url = bytes.fromhex(hex_value).decode('utf-8')
-                            if decoded_url and "playhouse.premiumvideo.click" in decoded_url:
-                                playhouse_url = decoded_url
-                                if playhouse_url.startswith("//"):
-                                    playhouse_url = "https:" + playhouse_url
-                                logger.info(f"[+] Hex'ten çözülen playhouse URL: {playhouse_url}")
-                                break
-                        except Exception as e:
-                            logger.error(f"[!] Hex çözme hatası: {e}")
+                gujan_match = re.search(r'gujan\.premiumvideo\.click/e/([a-zA-Z0-9]+)', src)
+                if gujan_match:
+                    file_id = gujan_match.group(1)
+                    logger.info(f"[+] Gujan File ID: {file_id}")
                     
-                    if playhouse_url:
-                        break
-        
-        
-        if playhouse_url:
-            playhouse_match = re.search(r'playhouse\.premiumvideo\.click/player/([a-zA-Z0-9]+)', playhouse_url)
-            if playhouse_match:
-                file_id = playhouse_match.group(1)
-                logger.info(f"[+] Playhouse File ID bulundu: {file_id}")
-                
-                
-                working_domain, m3u8_url = await get_correct_domain_from_playhouse(session, file_id)
-                logger.info(f"[+] Bulunan domain: {working_domain}, M3U8: {m3u8_url}")
+                    
+                    m3u8_url = await extract_gujan_m3u8(session, src, file_id)
+                    if m3u8_url:
+                        logger.info(f"[✅] Gujan M3U8 bulundu: {m3u8_url}")
+                        return create_proxy_url(m3u8_url)
         
         
         if not m3u8_url:
-            logger.info("[*] Playhouse bulunamadı, eski sistem ile deneniyor...")
+            iframe_selectors = [
+                'iframe[title="playhouse"]',
+                'iframe[src*="playhouse.premiumvideo.click"]',
+                'iframe[src*="premiumvideo.click/player"]'
+            ]
+            
+            playhouse_url = None
+            file_id = None
+            
+            
+            for selector in iframe_selectors:
+                iframe_element = soup.select_one(selector)
+                if iframe_element:
+                    src = iframe_element.get("src")
+                    if src and "playhouse.premiumvideo.click" in src:
+                        if src.startswith("//"):
+                            src = "https:" + src
+                        playhouse_url = src
+                        logger.info(f"[+] Playhouse iframe bulundu: {playhouse_url}")
+                        break
+            
+            
+            if not playhouse_url:
+                scripts = soup.find_all('script')
+                for script in scripts:
+                    script_content = script.get_text() or ""
+                    
+                    hex_pattern = re.compile(r'hexToString\w*\("([a-fA-F0-9]+)"\)')
+                    hex_matches = hex_pattern.findall(script_content)
+                    
+                    if hex_matches:
+                        logger.info(f"[+] Script içinde {len(hex_matches)} hex URL bulundu.")
+                        for hex_value in hex_matches:
+                            try:
+                                decoded_url = bytes.fromhex(hex_value).decode('utf-8')
+                                if decoded_url and "playhouse.premiumvideo.click" in decoded_url:
+                                    playhouse_url = decoded_url
+                                    if playhouse_url.startswith("//"):
+                                        playhouse_url = "https:" + playhouse_url
+                                    logger.info(f"[+] Hex'ten çözülen playhouse URL: {playhouse_url}")
+                                    break
+                            except Exception as e:
+                                logger.error(f"[!] Hex çözme hatası: {e}")
+                        
+                        if playhouse_url:
+                            break
+            
+            
+            if playhouse_url:
+                playhouse_match = re.search(r'playhouse\.premiumvideo\.click/player/([a-zA-Z0-9]+)', playhouse_url)
+                if playhouse_match:
+                    file_id = playhouse_match.group(1)
+                    logger.info(f"[+] Playhouse File ID bulundu: {file_id}")
+                    
+                    
+                    working_domain, m3u8_url = await get_correct_domain_from_playhouse(session, file_id)
+                    logger.info(f"[+] Bulunan domain: {working_domain}, M3U8: {m3u8_url}")
+        
+        # 3. FALLBACK KONTROLÜ
+        if not m3u8_url:
+            logger.info("[*] Playhouse ve Gujan bulunamadı, fallback sistem ile deneniyor...")
             
             iframe_selectors_fallback = [
                 "iframe#londonIframe",
@@ -435,7 +497,11 @@ async def extract_m3u8_from_movie(session, movie_url):
     except Exception as e:
         logger.error(f"[!] Film işleme genel hatası: {e}")
     
-    return m3u8_url
+    
+    if m3u8_url:
+        return create_proxy_url(m3u8_url)
+    
+    return None
 
 async def process_movies(all_movie_links, output_filename="filmfun.m3u"):
     """Tüm filmleri tek bir dosyaya yazar"""
