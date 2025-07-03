@@ -1,4 +1,8 @@
 #EXTM3U
+#EXTINF:-1 tvg-name="Zorlu Ev" tvg-language="Turkish" tvg-country="TR" tvg-id="ZORLU_EV" tvg-logo="https://dizifun4.com/images/data/2024_zorlu-ev.webp" group-title="Filmler",Zorlu Ev
+https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/kkk1vft4azv6xvvnxy6q/master.m3u8
+#EXTINF:-1 tvg-name="Barbie" tvg-language="Turkish" tvg-country="TR" tvg-id="BARBIE" tvg-logo="https://dizifun4.com/images/data/2023_barbie.webp" group-title="Filmler",Barbie
+https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/h6opqehqgmmmcpbtbcm3/master.m3u8
 #EXTINF:-1 tvg-name="Görevimiz Tehlike - Son Hesaplaşma" tvg-language="Turkish" tvg-country="TR" tvg-id="GOREVIMIZ_TEHLIKE_SON_HESAPLASMA" tvg-logo="https://dizifun4.com/images/data/2025_gorevimiz-tehlike---son-hesaplasma.webp" group-title="Filmler",Görevimiz Tehlike - Son Hesaplaşma
 https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/k85sw79f1bh99cz3bwmw/master.m3u8
 #EXTINF:-1 tvg-name="Son Durak: Kan Bağı" tvg-language="Turkish" tvg-country="TR" tvg-id="SON_DURAK_KAN_BAGI" tvg-logo="https://dizifun4.com/images/data/2025_son-durak-kan-bagi.webp" group-title="Filmler",Son Durak: Kan Bağı
