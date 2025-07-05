@@ -1,4 +1,20 @@
 #EXTM3U
+#EXTINF:-1 tvg-name="Çalgı Çengi: İkimiz" tvg-language="Turkish" tvg-country="TR" tvg-id="CALGI_CENGI_IKIMIZ" tvg-logo="https://dizifun4.com/images/data/2017_calgi-cengi-ikimiz.webp" group-title="Filmler",Çalgı Çengi: İkimiz
+https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/stydlsjhpf1t7obpaa5p/master.m3u8
+#EXTINF:-1 tvg-name="Yunan" tvg-language="Turkish" tvg-country="TR" tvg-id="YUNAN" tvg-logo="https://dizifun4.com/images/data/2025_yunan.webp" group-title="Filmler",Yunan
+https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/frfkbvfhwybwlarh8bpq/master.m3u8
+#EXTINF:-1 tvg-name="Günahkarlar" tvg-language="Turkish" tvg-country="TR" tvg-id="GUNAHKARLAR" tvg-logo="https://dizifun4.com/images/data/2025_gunahkarlar.webp" group-title="Filmler",Günahkarlar
+https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/1yztu8tamgojtfdk377z/master.m3u8
+#EXTINF:-1 tvg-name="Cenneti Korumak: Niue'nin Hikayesi" tvg-language="Turkish" tvg-country="TR" tvg-id="CENNETI_KORUMAK_NIUENIN_HIKAYESI" tvg-logo="https://dizifun4.com/images/data/2024_cenneti-korumak-niuenin-hikayesi.webp" group-title="Filmler",Cenneti Korumak: Niue'nin Hikayesi
+https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/bbyouk5zblebbt89u1j5/master.m3u8
+#EXTINF:-1 tvg-name="Sığırcık Kız" tvg-language="Turkish" tvg-country="TR" tvg-id="SIGIRCIK_KIZ" tvg-logo="https://dizifun4.com/images/data/2023_sigircik-kiz.webp" group-title="Filmler",Sığırcık Kız
+https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/m46anb4nxcuf6jbf4erd/master.m3u8
+#EXTINF:-1 tvg-name="İngiliz Hasta" tvg-language="Turkish" tvg-country="TR" tvg-id="INGILIZ_HASTA" tvg-logo="https://dizifun4.com/images/data/1996_ingiliz-hasta.webp" group-title="Filmler",İngiliz Hasta
+https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/y798pa7xdskv3v825gfu/master.m3u8
+#EXTINF:-1 tvg-name="Korku Burnu" tvg-language="Turkish" tvg-country="TR" tvg-id="KORKU_BURNU" tvg-logo="https://dizifun4.com/images/data/1991_korku-burnu.webp" group-title="Filmler",Korku Burnu
+https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/n8aobm48ih7b2ygt3x9z/master.m3u8
+#EXTINF:-1 tvg-name="Ben O Değilim" tvg-language="Turkish" tvg-country="TR" tvg-id="BEN_O_DEGILIM" tvg-logo="https://dizifun4.com/images/data/2013_ben-o-degilim.webp" group-title="Filmler",Ben O Değilim
+https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/bhg28befk4y2gnoyiuda/master.m3u8
 #EXTINF:-1 tvg-name="Yol Arkadaşım 2" tvg-language="Turkish" tvg-country="TR" tvg-id="YOL_ARKADASIM_2" tvg-logo="https://dizifun4.com/images/data/2018_yol-arkadasim-2.webp" group-title="Filmler",Yol Arkadaşım 2
 https://proxydizifun.vercel.app/api/proxy.js?referer=https://dizifun4.com&url=https://d2.premiumvideo.click/uploads/encode/mb3jgy4tngdfvsmwtew3/master.m3u8
 #EXTINF:-1 tvg-name="Yol Arkadaşım" tvg-language="Turkish" tvg-country="TR" tvg-id="YOL_ARKADASIM" tvg-logo="https://dizifun4.com/images/data/2017_yol-arkadasim.webp" group-title="Filmler",Yol Arkadaşım
